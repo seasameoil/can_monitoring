@@ -1,0 +1,27 @@
+{
+    "files.associations": {
+        "can_interface.h": "c",
+        "array": "c",
+        "atomic": "c",
+        "compare": "c",
+        "cstddef": "c",
+        "functional": "c",
+        "future": "c",
+        "iterator": "c",
+        "limits": "c",
+        "memory": "c",
+        "mutex": "c",
+        "sstream": "c",
+        "system_error": "c",
+        "type_traits": "c",
+        "vector": "c",
+        "xhash": "c",
+        "xiosbase": "c",
+        "xlocale": "c",
+        "xmemory": "c",
+        "xstring": "c",
+        "xtree": "c",
+        "xutility": "c",
+        "ws2tcpip.h": "c"
+    }
+}
