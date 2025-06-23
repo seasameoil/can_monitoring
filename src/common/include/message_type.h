@@ -16,7 +16,7 @@ typedef enum
     MSG_TYPE_ALARM = 0x02,
     MSG_TYPE_STATUS = 0x03,
     MSG_TYPE_CONFIG = 0x04,
-    MSG_TYPE_HEARTBREAK = 0x05
+    MSG_TYPE_HEARTBEAT = 0x05
 } message_type_t;
 
 #pragma pack(push, 1)
