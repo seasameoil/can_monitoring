@@ -23,6 +23,8 @@
         "xtree": "c",
         "xutility": "c",
         "ws2tcpip.h": "c",
-        "thread": "c"
+        "thread": "c",
+        "can_simulator.h": "c",
+        "message_type.h": "c"
     }
 }

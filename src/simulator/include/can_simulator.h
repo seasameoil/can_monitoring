@@ -1,8 +1,8 @@
 #ifndef CAN_SIMULATOR_H
 #define CAN_SIMULATOR_H
 
-#include "can_interface.h"
-#include "message_type.h"
+#include "../../common/include/can_interface.h"
+#include "../../common/include/message_type.h"
 #include <math.h>
 
 #ifdef _WIN32
@@ -62,6 +62,8 @@ typedef struct
     float warning_threshold_low;
     float error_threshold_high;
     float error_threshold_low;
+
+    can_interface_t *can_interface;
 
     // 스레드 관리
     thread_handle_t thread;

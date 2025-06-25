@@ -166,7 +166,7 @@ can_error_t can_receive(can_interface_t *can_interface, can_frame_t *frame, int 
             can_frame_t *msg = &queue->messages[idx];
 
             // 필터 검사
-            bool pass_filter = false;
+            bool pass_filter = true;
             if (can_interface->filter_enabled)
             {
                 pass_filter = ((msg->id & can_interface->filter_mask) == (can_interface->filter_id & can_interface->filter_mask));

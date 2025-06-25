@@ -1,4 +1,4 @@
-#include "can_simulator.h"
+#include "include/can_simulator.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -7,6 +7,9 @@
 
 // 외부 CAN 관리자 참조
 extern can_manager_t g_can_manager;
+// 전역 센서 인터페이스들 (각 센서마다 하나씩)
+static can_interface_t sensor_interfaces[MAX_SENSOR_NODES];
+static int interface_cnt = 0;
 
 #ifdef _WIN32
 static void mutex_init(mutex_t *mutex)
@@ -77,6 +80,33 @@ static uint32_t get_tick_count_ms()
 }
 #endif
 
+// 센서 인터페이스 초기화 함수
+static can_error_t init_sensor_interface(virtual_sensor_t *sensor)
+{
+    if (interface_cnt >= MAX_SENSOR_NODES)
+    {
+        return CAN_ERROR_INIT_FAILED;
+    }
+
+    char interface_name[32];
+    snprintf(interface_name, sizeof(interface_name), "Sensor %d", sensor->sensor_id);
+
+    can_interface_t *can_interface = &sensor_interfaces[interface_cnt];
+    can_error_t result = can_create_interface(can_interface, interface_name, sensor->sensor_id);
+
+    result = can_connect(can_interface);
+    if (result != CAN_SUCCESS)
+    {
+        return result;
+    }
+
+    // 센서에 인터페이스 포인터 저장
+    sensor->can_interface = can_interface;
+    interface_cnt++;
+
+    return CAN_SUCCESS;
+}
+
 // 센서 데이터 생성 함수
 static float generate_sensor_value(virtual_sensor_t *sensor, float time_sec)
 {
@@ -142,24 +172,11 @@ static void send_sensor_data(virtual_sensor_t *sensor)
     frame.is_remote = false;
     memcpy(frame.data, &sensor_msg, sizeof(sensor_data_msg_t));
 
-    // 전역 큐에 직접 추가
-    can_message_queue_t *queue = &g_can_manager.global_queue;
-
-    if (queue->cnt < CAN_MESSAGE_QUEUE_SIZE)
+    // can_send() 함수를 통해 전송
+    can_error_t result = can_send(sensor->can_interface, &frame);
+    if (result != CAN_SUCCESS && g_can_manager.debug_mode)
     {
-        queue->messages[queue->head] = frame;
-        queue->head = (queue->head + 1) % CAN_MESSAGE_QUEUE_SIZE;
-        queue->cnt++;
-
-        if (g_can_manager.debug_mode)
-        {
-            printf("[SIM] Sensor %d: %.2f %s (Status: %d)\n",
-                   sensor->sensor_id,
-                   sensor->current_value,
-                   (sensor->type == SENSOR_TYPE_TEMPERATURE) ? "C" : (sensor->type == SENSOR_TYPE_PRESSURE) ? "bar"
-                                                                                                            : "mm/s",
-                   sensor->status);
-        }
+        printf("[SIM ERROR] Failed to send sensor data for sensor %d: %d\n", sensor->sensor_id, result);
     }
 }
 
@@ -189,19 +206,11 @@ static void send_alaram_data(virtual_sensor_t *sensor, uint8_t alarm_level, uint
     frame.is_extended = false;
     frame.is_remote = false;
 
-    // 전역 큐에 직접 추가
-    can_message_queue_t *queue = &g_can_manager.global_queue;
-
-    if (queue->cnt < CAN_MESSAGE_QUEUE_SIZE)
+    // can_send() 함수를 통해 전송
+    can_error_t result = can_send(sensor->can_interface, &frame);
+    if (result != CAN_SUCCESS && g_can_manager.debug_mode)
     {
-        queue->messages[queue->head] = frame;
-        queue->head = (queue->head + 1) % CAN_MESSAGE_QUEUE_SIZE;
-        queue->cnt++;
-
-        if (g_can_manager.debug_mode)
-        {
-            printf("[SIM ALARM] Sensor %d: Level %d, Value %.sf\n", sensor->sensor_id, alarm_level, sensor->current_value);
-        }
+        printf("[SIM ERROR] Failed to send sensor data for sensor %d: %d\n", sensor->sensor_id, result);
     }
 }
 
@@ -222,14 +231,11 @@ static void send_status_message(virtual_sensor_t *sensor)
     frame.is_remote = false;
     memcpy(frame.data, &status_msg, sizeof(status_msg_t));
 
-    // 전역 큐에 직접 추가
-    can_message_queue_t *queue = &g_can_manager.global_queue;
-
-    if (queue->cnt < CAN_MESSAGE_QUEUE_SIZE)
+    // can_send() 함수를 통해 전송
+    can_error_t result = can_send(sensor->can_interface, &frame);
+    if (result != CAN_SUCCESS && g_can_manager.debug_mode)
     {
-        queue->messages[queue->head] = frame;
-        queue->head = (queue->head + 1) % CAN_MESSAGE_QUEUE_SIZE;
-        queue->cnt++;
+        printf("[SIM ERROR] Failed to send sensor data for sensor %d: %d\n", sensor->sensor_id, result);
     }
 }
 
@@ -342,6 +348,13 @@ can_error_t sim_add_temperature_sensor(can_simulator_t *simulator, uint8_t senso
                              base_temp + temp_range * 0.9f,
                              base_temp - temp_range * 0.9f);
 
+    // 센서 인터페이스 초기화
+    can_error_t result = init_sensor_interface(sensor);
+    if (result != CAN_SUCCESS && g_can_manager.debug_mode)
+    {
+        printf("[SIM ERROR] Failed to send sensor data for sensor %d: %d\n", sensor_id, result);
+    }
+
     simulator->sensor_cnt++;
 
     printf("[SIM] Temperature sensor %d added (Base: %.1fC)\n", sensor->sensor_id, base_temp);
@@ -371,11 +384,19 @@ can_error_t sim_add_pressure_sensor(can_simulator_t *simulator, uint8_t sensor_i
     sensor->params.noise_level = pressure_range * 0.05f;
     sensor->params.drift_rate = 0.002f;
 
-    send_alaram_data(sensor,
-                     base_pressure + pressure_range * 0.8f,
-                     base_pressure - pressure_range * 0.3f,
-                     base_pressure + pressure_range * 0.95f,
-                     base_pressure - pressure_range * 0.1f);
+    sim_set_alarm_thresholds(sensor,
+                             base_pressure + pressure_range * 0.8f,
+                             base_pressure - pressure_range * 0.3f,
+                             base_pressure + pressure_range * 0.95f,
+                             base_pressure - pressure_range * 0.1f);
+
+    // 센서 인터페이스 초기화
+    can_error_t result = init_sensor_interface(sensor);
+    if (result != CAN_SUCCESS && g_can_manager.debug_mode)
+    {
+        printf("[SIM ERROR] Failed to send sensor data for sensor %d: %d\n", sensor_id, result);
+    }
+
     simulator->sensor_cnt++;
 
     printf("[SIM] Pressure sensor %d added (Base: %.1f bar)\n", sensor->sensor_id, base_pressure);
@@ -404,12 +425,20 @@ can_error_t sim_add_vibration_sensor(can_simulator_t *simulator, uint8_t sensor_
     sensor->params.noise_level = vibration_range * 0.2f;
     sensor->params.drift_rate = 0.0005f;
 
-    send_alaram_data(sensor,
-                     base_vibration + vibration_range * 0.6f, 0,
-                     base_vibration + vibration_range * 0.8f, 0);
+    sim_set_alarm_thresholds(sensor,
+                             base_vibration + vibration_range * 0.6f, 0,
+                             base_vibration + vibration_range * 0.8f, 0);
+
+    // 센서 인터페이스 초기화
+    can_error_t result = init_sensor_interface(sensor);
+    if (result != CAN_SUCCESS && g_can_manager.debug_mode)
+    {
+        printf("[SIM ERROR] Failed to send sensor data for sensor %d: %d\n", sensor_id, result);
+    }
+
     simulator->sensor_cnt++;
 
-    printf("[SIM] Vibration sensor %d added (Base: %.1f bar)\n", sensor->sensor_id, base_vibration);
+    printf("[SIM] Vibration sensor %d added (Base: %.1f mm/s)\n", sensor->sensor_id, base_vibration);
     return CAN_SUCCESS;
 }
 
@@ -496,6 +525,14 @@ void sim_cleanup(can_simulator_t *simulator)
         return;
 
     sim_stop(simulator);
+
+    // 센서 인터페이스를 정의
+    for (int i = 0; i < interface_cnt; i++)
+    {
+        can_disconnect(&sensor_interfaces[i]);
+    }
+    interface_cnt = 0;
+
     mutex_destroy(&simulator->sim_mutex);
     memset(simulator, 0, sizeof(can_simulator_t));
 
