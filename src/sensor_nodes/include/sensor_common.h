@@ -1,5 +1,5 @@
-#ifndef CAN_SIMULATOR_H
-#define CAN_SIMULATOR_H
+#ifndef SENSOR_COMMON_H
+#define SENSOR_COMMON_H
 
 #include "../../common/include/can_interface.h"
 #include "../../common/include/message_type.h"
@@ -73,22 +73,4 @@ typedef struct
     DWORD thread_id;
 #endif
 } virtual_sensor_t;
-
-typedef struct
-{
-    virtual_sensor_t sensors[MAX_SENSOR_NODES];
-    int sensor_cnt;
-    bool is_running;
-    mutex_t sim_mutex;
-} can_simulator_t;
-
-// function
-can_error_t sim_init(can_simulator_t *simulator);
-can_error_t sim_add_temperature_sensor(can_simulator_t *simulator, uint8_t sensor_id, float base_temp, float temp_range);
-can_error_t sim_add_pressure_sensor(can_simulator_t *simulator, uint8_t sensor_id, float base_pressure, float pressure_range);
-can_error_t sim_add_vibration_sensor(can_simulator_t *simulator, uint8_t sensor_id, float base_vibration, float vibration_range);
-can_error_t sim_start(can_simulator_t *simulator);
-can_error_t sim_stop(can_simulator_t *simulator);
-void sim_cleanup(can_simulator_t *simulator);
-void sim_set_alarm_thresholds(virtual_sensor_t *sensor, float warn_high, float warn_low, float err_high, float err_low);
 #endif
